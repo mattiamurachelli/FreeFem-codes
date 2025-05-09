@@ -1,0 +1,11 @@
+// Script to generate a square mesh
+real l = 1.0;                                               // Side length
+int domainBorder = 1;                                       // Domain border label
+
+border side1(t=0, l) {x=t; y=0; label=domainBorder;}
+border side2(t=0, l) {x=l; y=t; label=domainBorder;}
+border side3(t=0, l) {x=l-t; y=l; label=domainBorder;}
+border side4(t=0, l) {x=0; y=l-t; label=domainBorder;}
+
+macro borderLabel domainBorder // 
+macro generateMesh(n) buildmesh(side1(l*n) + side2(l*n) + side3(l*n) + side4(l*n)); //

@@ -1,0 +1,4 @@
+// File used to store parameters for the Laplace equation solver
+
+macro NumberOfTests() 4                                                                               //
+macro RefinementVector() [2, 3, 4, 5]                                                                 //

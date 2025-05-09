@@ -1,0 +1,122 @@
+/************************************ EXECUTION SETUP ****************************************/
+
+// Load necessary libraries
+load "iovtk";                                   // Load the VTK library for output
+
+// Load necessary files
+//include "meshes/square_mesh.edp"                // Load the mesh generation script
+include "meshes/circle_mesh.edp"               // Load the mesh generation script
+include "config/functions.edp"                  // Load the functions
+include "config/parameters.edp"                 // Load the parameters
+
+// Commands
+verbosity = 0;                                  // Avoid unnecessary output    
+cout.precision(4);                              // Set precision for output
+int[int] orderOut = [1];                        // Order of the output solution
+system("mkdir Results");                        // Create the output directory
+
+/******************************** READ PARAMETERS FROM FILES **********************************/
+
+// Execution paramaters
+int nTest = NumberOfTests;                      // Number of tests
+int[int] nRef = RefinementVector;               // Vector of mesh refinements
+
+// Import functions
+func mu = DiffusionCoefficient;                   // Diffusion coefficient
+func f = ForcingTerm;                             // Forcing term
+func g = DirichletBC;                             // Dirichlet boundary condition
+func uex = ExactSolution;                         // Exact solution
+func dxUex = ExactSolutionDx;                     // Derivative of the exact solution wrt x
+func dyUex = ExactSolutionDy;                     // Derivative of the exact solution wrt y
+
+/******************** SOLVE THE PROBLEM, COMPUTE ERRORS AND SAVE THE SOLUTION ****************/
+
+// Create error vectors (we compute it for each test at the last time step)
+// and convergence rates vectors
+real[int] errorL2(nTest);                 // L2 error
+real[int] errorH1(nTest);                 // H1 error
+real[int] h(nTest);                       // Mesh size
+real[int] rateL2(nTest-1);                // L2 convergence rate
+real[int] rateH1(nTest-1);                // H1 convergence rate
+
+for(int i=0; i < nTest; i++){
+    cout << "==================================================================" << endl;
+    cout << "Test with nRef = " << nRef(i) << endl;
+    cout << "==================================================================" << endl;
+
+    // Generate the mesh
+    mesh Th = generateMesh(2^nRef(i));
+
+    // Extract the mesh size
+    fespace VhMeshSize(Th, P0);
+    VhMeshSize hMeshSize  = hTriangle;
+    h(i) = int2d(Th)(hMeshSize)/int2d(Th)(1);
+    //h(i) = hMeshSize[].max;
+    //h(i) = hMeshSize[].min;
+    //h(i) = 0.5*(hMeshSize[].max +hMeshSize[].min);
+
+    // Define the finite element space
+    fespace Vh(Th, P1);                             
+    Vh u, v;                                        
+
+    // Define a macro for the gradient
+    macro grad(u) [dx(u), dy(u)] //
+
+    // Define the variational forms
+    varf LaplaceEquationLHS(u, v)
+        = int2d(Th) (mu*grad(u)'*grad(v))
+        + on(borderLabel, u=g);
+
+    varf LaplaceEquationRHS(u, v)
+        = int2d(Th)(f*v)
+        + on(borderLabel, u=g);
+
+    // Solve the problem
+    matrix<real> A = LaplaceEquationLHS(Vh, Vh, solver=UMFPACK);
+    real[int] b = LaplaceEquationRHS(0, Vh);
+
+    u[] = A^-1*b;
+
+    // Compute the errors   
+    errorL2(i) = sqrt(int2d(Th)((u-uex)^2));
+    errorH1(i) = sqrt(errorL2(i)*errorL2(i)
+                    + int2d(Th)((dx(u)-dxUex)^2 + (dy(u)-dyUex)^2));
+    // Save the solution
+    savevtk("Results/output-"+nRef(i)+".vtk", Th, u, dataname="u", order=orderOut);
+}
+
+/************************** COMPUTE CONVERGENCE RATES AND PRINT OUTPUT ***********************/
+
+// Compute the convergence rates
+for(int i = 0; i < nTest-1; ++i){
+    rateL2(i) = log(errorL2(i+1)/errorL2(i))/log(h(i+1)/h(i));
+    rateH1(i) = log(errorH1(i+1)/errorH1(i))/log(h(i+1)/h(i));
+}
+
+// Print the results
+// Errors
+cout << "L2 errors : " << endl;
+for(int i=0; i < nTest; ++i){
+    cout << errorL2(i) << "\t";
+}
+cout << endl;
+
+cout << "H1 errors : " << endl; 
+for(int i=0; i < nTest; ++i){
+    cout << errorH1(i) << "\t" ;
+}
+cout << endl;
+// Convergence rates
+cout << "L2 convergence rates : " << endl;
+for(int i=0; i < nTest-1; ++i){
+    cout << rateL2(i) << "\t";
+}
+cout << endl;
+
+cout << "H1 convergence rates : " << endl;
+for(int i=0; i < nTest-1; ++i){
+    cout << rateH1(i) << "\t";
+}
+cout << endl;
+
+/*********************************************************************************************/
