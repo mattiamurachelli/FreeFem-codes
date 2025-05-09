@@ -7,13 +7,15 @@ This project provides a FreeFEM implementation for solving the Laplace equation 
 ## 📁 Project Structure
 ```
 .
-├── Laplace.edp
-├── config
-│   ├── functions.edp
-│   └── parameters.edp
-└── meshes
-    ├── circle_mesh.edp
-    └── square_mesh.edp
+├── README.md
+└── src
+    ├── Laplace.edp
+    ├── config
+    │   ├── functions.edp
+    │   └── parameters.edp
+    └── meshes
+        ├── circle_mesh.edp
+        └── square_mesh.edp
 ```
 ---
 
@@ -31,10 +33,10 @@ The solver numerically solves the Laplace equation using finite element discreti
 
 ## ⚙️ How to Use
 
-1. **Choose or modify a mesh** in the `meshes/` folder.
+1. **Choose or modify a mesh** in the `meshes/` folder by modifying accordingly the first lines of the script.
 2. **Configure parameters** in:
-   - `config/parameters.edp` – e.g., list of mesh refinements
-   - `config/functions.edp` – e.g., forcing term `f`, Dirichlet data `g`, exact solution `u_exact` and more
+   - `config/parameters.edp` – e.g., list of `mesh refinements` and more
+   - `config/functions.edp` – e.g., `forcing term`, `Dirichlet data `, `exact solution` and more
 3. **Run the solver**:
    ```bash
    FreeFem++ Laplace.edp
