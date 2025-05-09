@@ -1,0 +1,8 @@
+// Script to generate a circle mesh
+real r = 1.0;                                               // radius length
+int domainBorder = 1;                                       // Domain border label
+
+border circumference(t=0, 2*pi) {x=r*cos(t); y=r*sin(t); label=domainBorder;}
+
+macro borderLabel domainBorder //
+macro generateMesh(n) buildmesh(circumference(4*r*n)); //

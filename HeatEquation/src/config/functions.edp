@@ -1,0 +1,9 @@
+// File used to store functions for the Heat equation solver
+
+macro DiffusionCoefficient() func real mu(real x, real y, real t) {return 1.0;}                                     //                                                                      
+macro ForcingTerm() func real f(real x, real y, real t) {return (8*pi*pi-1)*sin(2*pi*x)*sin(2*pi*y)*exp(-t);}       //
+macro DirichletBC() func real g(real x, real y, real t) {return sin(2*pi*x)*sin(2*pi*y)*exp(-t);}                   //
+macro InitialCondition() func u0 = sin(2*pi*x)*sin(2*pi*y);                                                         //
+macro ExactSolution() func real uex(real x, real y, real t) {return sin(2*pi*x)*sin(2*pi*y)*exp(-t);}               //                                       
+macro ExactSolutionDx() func real dxUex(real x, real y, real t) {return 2*pi*cos(2*pi*x)*sin(2*pi*y)*exp(-t);}      //                                         
+macro ExactSolutionDy() func real dyUex(real x, real y, real t) {return 2*pi*sin(2*pi*x)*cos(2*pi*y)*exp(-t);}      //                                    
