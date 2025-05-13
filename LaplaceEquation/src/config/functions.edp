@@ -2,7 +2,7 @@
 
 macro DiffusionCoefficient() 1                                                                 //
 macro ForcingTerm() 8*pi^2*sin(2*pi*x)*sin(2*pi*y)                                             //
-macro DirichletBC() 0                                                                          //
+macro DirichletBC() sin(2*pi*x)*sin(2*pi*y)                                                    //
 macro ExactSolution() sin(2*pi*x)*sin(2*pi*y)                                                  //
 macro ExactSolutionDx() 2*pi*cos(2*pi*x)*sin(2*pi*y)                                           //
 macro ExactSolutionDy() 2*pi*sin(2*pi*x)*cos(2*pi*y)                                           //
