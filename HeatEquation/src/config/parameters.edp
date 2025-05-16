@@ -2,6 +2,7 @@
 
 macro NumberOfTests() 4                                                                               //
 macro RefinementVector() [2, 3, 4, 5]                                                                 //
+macro ComputeErrors() 1                                                                               //
 macro FinalTime() 1.0                                                                                 //
 macro TimeStep() 0.005                                                                                //
 macro Theta() 0.5                                                                                     //

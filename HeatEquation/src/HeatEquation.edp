@@ -4,8 +4,8 @@
 load "iovtk";                                   // Load the VTK library for output
 
 // Load necessary files
-include "meshes/square_mesh.edp"                // Load the mesh generation script
-//include "meshes/circle_mesh.edp"                // Load the mesh generation script
+//include "meshes/square_mesh.edp"                // Load the mesh generation script
+include "meshes/circle_mesh.edp"                // Load the mesh generation script
 include "config/functions.edp"                  // Load the functions
 include "config/parameters.edp"                 // Load the parameters
 
@@ -20,6 +20,7 @@ system("mkdir Results");                        // Create the output directory
 // Time, method and execution parameters
 int nTest = NumberOfTests;                      // Number of tests
 int[int] nRef = RefinementVector;               // Vector of mesh refinements
+int computeErrors = ComputeErrors;              // Compute errors
 real T = FinalTime;                             // Final time
 real dt = TimeStep;                             // Time step
 int numSteps = int(T/dt);                       // Number of time steps
@@ -40,11 +41,12 @@ ExactSolutionDy;                                // Derivative of the exact solut
 
 // Create error vectors (we compute it for each test at the last time step)
 // and convergence rates vectors
+
 real[int] errorL2(nTest);                 // L2 error
 real[int] errorH1(nTest);                 // H1 error
-real[int] h(nTest);                       // Mesh size
 real[int] rateL2(nTest-1);                // L2 convergence rate
 real[int] rateH1(nTest-1);                // H1 convergence rate 
+real[int] h(nTest);                       // Mesh size
 
 // Here begins the loop over the number of tests
 for (int i=0; i < nTest; i++) {
@@ -53,12 +55,12 @@ for (int i=0; i < nTest; i++) {
     cout << "==================================================================" << endl;
 
     // Reset the counter to name the solutions
-    count = 0;
+    count = 1;
 
     // Generate the mesh
     mesh Th = generateMesh(2^nRef(i));
 
-    // Extract the mesh size
+    // Extract the mesh size (different definitions of stepsize are provided)
     fespace VhMeshSize(Th, P0);
     VhMeshSize hMeshSize  = hTriangle;
     h(i) = int2d(Th)(hMeshSize)/int2d(Th)(1);
@@ -89,6 +91,9 @@ for (int i=0; i < nTest; i++) {
     // Initialize time dependent "old" variables
     uold = u0;
     fold = f(x,y,0);
+
+    // Save the initial condition
+    savevtk("Results/heatEq-"+nRef(i)+"-0.vtk", Th, u0, dataname = "u", order = orderOut);
 
     // Declare the time variable, linear system matrix and the rhs vector
     real currTime = 0;
@@ -127,20 +132,23 @@ for (int i=0; i < nTest; i++) {
         }
     } // End of the time loop
 
-    // Compute errors at the last time step    
+    if(computeErrors) {
+        // Compute errors at the last time step    
     errorL2(i) = sqrt(int2d(Th)((u-uex(x,y,currTime))^2));
     errorH1(i) = sqrt(errorL2(i)*errorL2(i)
                     + int2d(Th)((dx(u)-dxUex(x,y,currTime))^2 + (dy(u)-dyUex(x,y,currTime))^2));
-
+    }
+    
 } // End of the loop over the number of tests
 
 /************************** COMPUTE CONVERGENCE RATES AND PRINT OUTPUT ***********************/
+if(computeErrors) {
 
-// Compute the convergence rates
-for(int i = 0; i < nTest-1; ++i){
-    rateL2(i) = log(errorL2(i+1)/errorL2(i))/log(h(i+1)/h(i));
-    rateH1(i) = log(errorH1(i+1)/errorH1(i))/log(h(i+1)/h(i));
-}
+    // Compute the convergence rates
+    for(int i = 0; i < nTest-1; ++i){
+        rateL2(i) = log(errorL2(i+1)/errorL2(i))/log(h(i+1)/h(i));
+        rateH1(i) = log(errorH1(i+1)/errorH1(i))/log(h(i+1)/h(i));
+    }
 
 // Print the results
 // Errors
@@ -167,5 +175,7 @@ for(int i=0; i < nTest-1; ++i){
     cout << rateH1(i) << "\t";
 }
 cout << endl;
+
+}
 
 /*********************************************************************************************/
