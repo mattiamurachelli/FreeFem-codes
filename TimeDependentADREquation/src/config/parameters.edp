@@ -1,0 +1,10 @@
+// File used to store parameters for the Heat equation solver
+
+macro NumberOfTests() 1                                                                               //
+macro RefinementVector() [5]                                                                 //
+macro ComputeErrors() 0                                                                               //
+macro FinalTime() 1.0                                                                                 //
+macro TimeStep() 0.0025                                                                                //
+macro Theta() 0.5                                                                                     //
+macro Delta() 0.5                                                                                     //
+macro SaveEveryKTimeSteps() 1                                                                         //

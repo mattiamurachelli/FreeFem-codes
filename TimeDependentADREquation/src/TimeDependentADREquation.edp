@@ -1,0 +1,218 @@
+/************************************ EXECUTION SETUP ****************************************/
+
+// Load necessary libraries
+load "iovtk";                                   // Load the VTK library for output
+
+// Load necessary files
+include "meshes/square_mesh.edp"                // Load the mesh generation script
+//include "meshes/circle_mesh.edp"                // Load the mesh generation script
+include "config/functions.edp"                  // Load the functions
+include "config/parameters.edp"                 // Load the parameters
+
+// Commands
+verbosity = 0;                                  // Avoid unnecessary output    
+cout.precision(4);                              // Set precision for output
+int[int] orderOut = [1];                        // Order of the output solution
+system("mkdir Results");                        // Create the output directory
+
+/******************************** READ PARAMETERS FROM FILES *********************************/
+
+// Time, method and execution parameters
+int nTest = NumberOfTests;                      // Number of tests
+int[int] nRef = RefinementVector;               // Vector of mesh refinements
+int computeErrors = ComputeErrors;              // Compute errors
+real T = FinalTime;                             // Final time
+real dt = TimeStep;                             // Time step
+int numSteps = int(T/dt);                       // Number of time steps
+real theta = Theta;                             // Theta method parameter [0,1]
+real delta = Delta;                             // Delta parameter for the SUPG method (to compute tauK)
+int count;                                      // Counter for the vtk files
+int k = SaveEveryKTimeSteps;                    // Save every k time steps
+
+// Import functions
+DiffusionCoefficient;                           // Diffusion coefficient
+TransportCoefficientX;                          // Transport coefficient (x component)
+TransportCoefficientY;                          // Transport coefficient (y component)
+ReactionCoefficient;                            // Reaction coefficient
+ForcingTerm;                                    // Forcing term
+DirichletBC;                                    // Dirichlet boundary condition
+InitialCondition;                               // Initial condition
+ExactSolution;                                  // Exact solution
+ExactSolutionDx;                                // Derivative of the exact solution wrt x
+ExactSolutionDy;                                // Derivative of the exact solution wrt y
+
+/******************** SOLVE THE PROBLEM, COMPUTE ERRORS AND SAVE THE SOLUTION ****************/
+
+// Create error vectors (we compute it for each test at the last time step)
+// and convergence rates vectors
+real[int] errorL2(nTest);                 // L2 error
+real[int] errorH1(nTest);                 // H1 error
+real[int] rateL2(nTest-1);                // L2 convergence rate
+real[int] rateH1(nTest-1);                // H1 convergence rate 
+real[int] h(nTest);                       // Mesh size
+
+// Here begins the loop over the number of tests
+for (int i=0; i < nTest; i++) {
+    cout << "==================================================================" << endl;
+    cout << "Test with nRef = " << nRef(i) << endl;
+    cout << "==================================================================" << endl;
+
+    // Reset the counter to name the solutions
+    count = 1;
+
+    // Generate the mesh
+    mesh Th = generateMesh(2^nRef(i));
+
+    // Extract the mesh size
+    fespace VhMeshSize(Th, P0);
+    VhMeshSize hMeshSize  = hTriangle;
+    h(i) = int2d(Th)(hMeshSize)/int2d(Th)(1);
+    //h(i) = hMeshSize[].max;
+    //h(i) = hMeshSize[].min;
+    //h(i) = 0.5*(hMeshSize[].max +hMeshSize[].min);
+
+    // Create FESpace
+    fespace Vh(Th, P1);
+    Vh u, uold, v, fCurr, fold, gCurr, muCurr, betaCurrX, betaCurrY, gammaCurr;
+
+    // Define macros for easier varf writing
+    macro grad(w) [dx(w), dy(w)] //
+    macro L(w, b1, b2, gamma) (b1*dx(w) + dx(b1)*w + b2*dx(w) + dx(b2)*w + gamma*w) //
+    macro SkewSym(w, b1, b2) (b1*dx(w) + dx(b1)*w + b2*dx(w) + dx(b2)*w + [b1, b2]'*grad(w)) //
+
+
+    // Define the variational forms
+    varf TimeDependentADREquationLHS(u, v)
+        = int2d(Th)(u*v/dt)
+        + int2d(Th)(muCurr*theta*grad(u)'*grad(v))
+        - int2d(Th)(theta*[betaCurrX, betaCurrY]'*grad(v)*u)
+        + int2d(Th)(theta*gammaCurr*u*v)
+        + on(borderLabel, u = gCurr);
+
+    varf TimeDependentADREquationRHS(u, v)
+        = int2d(Th)(uold*v/dt)
+        - int2d(Th)(muCurr*(1-theta)*grad(uold)'*grad(v))
+        + int2d(Th)((1-theta)*[betaCurrX, betaCurrY]'*grad(v)*uold)
+        - int2d(Th)((1-theta)*gammaCurr*uold*v)
+        + int2d(Th)(theta*fCurr*v)
+        + int2d(Th)((1-theta)*fold*v)
+        + on(borderLabel, u = gCurr);
+
+    // Define the corrective terms for SUPG method
+    VhMeshSize tauK;
+    
+    varf SUPGLHS(u, v)
+        = int2d(Th)(tauK*theta*L(u, betaCurrX, betaCurrY, gammaCurr)*SkewSym(v, betaCurrX, betaCurrY))
+        + on(borderLabel, u = gCurr);
+
+    varf SUPGRHS(u, v)
+        = int2d(Th)(tauK*theta*fCurr*SkewSym(v, betaCurrX, betaCurrY))
+        + int2d(Th)(tauK*(1-theta)*fold*SkewSym(v, betaCurrX, betaCurrY))
+        - int2d(Th)(tauK*(1-theta)*L(uold, betaCurrX, betaCurrY, gammaCurr)*SkewSym(v, betaCurrX, betaCurrY))
+        + on(borderLabel, u = gCurr);
+
+    // Initialize time dependent "old" variables
+    uold = u0;
+    fold = f(x,y,0);
+
+    // Save the initial condition
+    savevtk("Results/ADREquation-"+nRef(i)+"-0.vtk", Th, u0, dataname = "u", order = orderOut);
+
+    // Declare the time variable, linear system matrix and the rhs vector
+    real currTime = 0;
+    matrix<real> A(Vh.ndof, Vh.ndof);
+    matrix<real> S(Vh.ndof, Vh.ndof);
+    matrix<real> fullA(Vh.ndof, Vh.ndof);
+    real[int] b(Vh.ndof);
+    real[int] s(Vh.ndof);
+    real[int] fullb(Vh.ndof);
+
+    // Solve the problem in time, we begin at t = dt
+    // we iterate for numSteps times since we already have the initial condition
+    // and we are going to compute the solution at t = dt, 2*dt, ..., T
+    for(int j=1; j <= numSteps; ++j){
+        // Compute and print the current time
+        currTime = j*dt;
+        cout << "Current time : " << currTime << endl;
+
+        // Update the time dependent terms
+        muCurr = mu(x,y,currTime);
+        betaCurrX = beta1(x, y, currTime);
+        betaCurrY = beta2(x, y, currTime);
+        gammaCurr = gamma(x, y, currTime);
+        fCurr = f(x,y,currTime);
+        gCurr = g(x,y,currTime);
+
+        // Update the SUPG parameter
+        tauK = delta*hMeshSize/(sqrt(betaCurrX^2 + betaCurrY^2));
+
+        // Compute the linear system matrix and the rhs
+        A = TimeDependentADREquationLHS(Vh, Vh);
+        b = TimeDependentADREquationRHS(0, Vh);
+        S = SUPGLHS(Vh, Vh);
+        s = SUPGRHS(0, Vh);
+        fullA = A + S;
+        fullb = b + s;
+
+        // Solve the linear system
+        set(fullA, solver = UMFPACK);
+        u[] = fullA^-1 * fullb;
+
+        // Update time dependent terms
+        fold = fCurr;
+        uold = u;
+
+        // Save the solution every k time steps
+        if(j % k == 0) {
+            savevtk("Results/ADREquation-"+nRef(i)+"-"+count+".vtk", Th, u, dataname = "u", order = orderOut);
+            ++count;
+        }
+    } // End of the time loop
+    if(computeErrors) {
+        // Compute errors at the last time step    
+        errorL2(i) = sqrt(int2d(Th)((u-uex(x,y,currTime))^2));
+        errorH1(i) = sqrt(errorL2(i)*errorL2(i)
+                   + int2d(Th)((dx(u)-dxUex(x,y,currTime))^2 + (dy(u)-dyUex(x,y,currTime))^2));
+    }
+   
+
+} // End of the loop over the number of tests
+
+/************************** COMPUTE CONVERGENCE RATES AND PRINT OUTPUT ***********************/
+if(computeErrors) {
+
+    // Compute the convergence rates
+    for(int i = 0; i < nTest-1; ++i){
+        rateL2(i) = log(errorL2(i+1)/errorL2(i))/log(h(i+1)/h(i));
+        rateH1(i) = log(errorH1(i+1)/errorH1(i))/log(h(i+1)/h(i));
+    }
+
+    // Print the results
+    // Errors
+    cout << "L2 errors : " << endl;
+    for(int i=0; i < nTest; ++i){
+        cout << errorL2(i) << "\t";
+    }
+    cout << endl;
+
+    cout << "H1 errors : " << endl; 
+    for(int i=0; i < nTest; ++i){
+        cout << errorH1(i) << "\t" ;
+    }
+    cout << endl;
+    // Convergence rates
+    cout << "L2 convergence rates : " << endl;
+    for(int i=0; i < nTest-1; ++i){
+        cout << rateL2(i) << "\t";
+    }
+    cout << endl;
+
+    cout << "H1 convergence rates : " << endl;
+    for(int i=0; i < nTest-1; ++i){
+        cout << rateH1(i) << "\t";
+    }
+    cout << endl;
+
+}
+
+/*********************************************************************************************/
