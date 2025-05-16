@@ -20,6 +20,7 @@ system("mkdir Results");                        // Create the output directory
 // Execution paramaters
 int nTest = NumberOfTests;                      // Number of tests
 int[int] nRef = RefinementVector;               // Vector of mesh refinements
+int computeErrors = ComputeErrors;              // Compute errors
 
 // Import functions
 func mu = DiffusionCoefficient;                   // Diffusion coefficient
@@ -77,46 +78,51 @@ for(int i=0; i < nTest; i++){
 
     u[] = A^-1*b;
 
-    // Compute the errors   
-    errorL2(i) = sqrt(int2d(Th)((u-uex)^2));
-    errorH1(i) = sqrt(errorL2(i)*errorL2(i)
-                    + int2d(Th)((dx(u)-dxUex)^2 + (dy(u)-dyUex)^2));
+    if(computeErrors) {
+        // Compute the errors   
+        errorL2(i) = sqrt(int2d(Th)((u-uex)^2));
+        errorH1(i) = sqrt(errorL2(i)*errorL2(i)
+                        + int2d(Th)((dx(u)-dxUex)^2 + (dy(u)-dyUex)^2));
+    }
+    
     // Save the solution
     savevtk("Results/output-"+nRef(i)+".vtk", Th, u, dataname="u", order=orderOut);
 }
 
 /************************** COMPUTE CONVERGENCE RATES AND PRINT OUTPUT ***********************/
+if(computeErrors) {
+    // Compute the convergence rates
+    for(int i = 0; i < nTest-1; ++i){
+        rateL2(i) = log(errorL2(i+1)/errorL2(i))/log(h(i+1)/h(i));
+        rateH1(i) = log(errorH1(i+1)/errorH1(i))/log(h(i+1)/h(i));
+    }
 
-// Compute the convergence rates
-for(int i = 0; i < nTest-1; ++i){
-    rateL2(i) = log(errorL2(i+1)/errorL2(i))/log(h(i+1)/h(i));
-    rateH1(i) = log(errorH1(i+1)/errorH1(i))/log(h(i+1)/h(i));
-}
+    // Print the results
+    // Errors
+    cout << "L2 errors : " << endl;
+    for(int i=0; i < nTest; ++i){
+        cout << errorL2(i) << "\t";
+    }
+    cout << endl;
 
-// Print the results
-// Errors
-cout << "L2 errors : " << endl;
-for(int i=0; i < nTest; ++i){
-    cout << errorL2(i) << "\t";
-}
-cout << endl;
+    cout << "H1 errors : " << endl; 
+    for(int i=0; i < nTest; ++i){
+        cout << errorH1(i) << "\t" ;
+    }
+    cout << endl;
+    // Convergence rates
+    cout << "L2 convergence rates : " << endl;
+    for(int i=0; i < nTest-1; ++i){
+        cout << rateL2(i) << "\t";
+    }
+    cout << endl;
 
-cout << "H1 errors : " << endl; 
-for(int i=0; i < nTest; ++i){
-    cout << errorH1(i) << "\t" ;
-}
-cout << endl;
-// Convergence rates
-cout << "L2 convergence rates : " << endl;
-for(int i=0; i < nTest-1; ++i){
-    cout << rateL2(i) << "\t";
-}
-cout << endl;
+    cout << "H1 convergence rates : " << endl;
+    for(int i=0; i < nTest-1; ++i){
+        cout << rateH1(i) << "\t";
+    }
+    cout << endl;
 
-cout << "H1 convergence rates : " << endl;
-for(int i=0; i < nTest-1; ++i){
-    cout << rateH1(i) << "\t";
 }
-cout << endl;
 
 /*********************************************************************************************/
