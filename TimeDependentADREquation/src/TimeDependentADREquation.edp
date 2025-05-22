@@ -4,8 +4,8 @@
 load "iovtk";                                   // Load the VTK library for output
 
 // Load necessary files
-include "meshes/square_mesh.edp"                // Load the mesh generation script
-//include "meshes/circle_mesh.edp"                // Load the mesh generation script
+//include "meshes/square_mesh.edp"                // Load the mesh generation script
+include "meshes/circle_mesh.edp"                // Load the mesh generation script
 include "config/functions.edp"                  // Load the functions
 include "config/parameters.edp"                 // Load the parameters
 
@@ -77,8 +77,9 @@ for (int i=0; i < nTest; i++) {
 
     // Define macros for easier varf writing
     macro grad(w) [dx(w), dy(w)] //
-    macro L(w, b1, b2, gamma) (b1*dx(w) + dx(b1)*w + b2*dx(w) + dx(b2)*w + gamma*w) //
-    macro SkewSym(w, b1, b2) (b1*dx(w) + dx(b1)*w + b2*dx(w) + dx(b2)*w + [b1, b2]'*grad(w)) //
+    macro L(w, b1, b2, gamma) (b1*dx(w) + dx(b1)*w + b2*dy(w) + dy(b2)*w + gamma*w) //
+    macro Lss(w, b1, b2) 0.5*(b1*dx(w) + dx(b1)*w + b2*dy(w) + dy(b2)*w + [b1, b2]'*grad(w)) //
+    
 
 
     // Define the variational forms
@@ -102,13 +103,15 @@ for (int i=0; i < nTest; i++) {
     VhMeshSize tauK;
     
     varf SUPGLHS(u, v)
-        = int2d(Th)(tauK*theta*L(u, betaCurrX, betaCurrY, gammaCurr)*SkewSym(v, betaCurrX, betaCurrY))
+        = int2d(Th)(tauK*theta*L(u, betaCurrX, betaCurrY, gammaCurr)*Lss(v, betaCurrX, betaCurrY))
+        + int2d(Th)(tauK*u/dt*Lss(v, betaCurrX, betaCurrY))
         + on(borderLabel, u = gCurr);
 
     varf SUPGRHS(u, v)
-        = int2d(Th)(tauK*theta*fCurr*SkewSym(v, betaCurrX, betaCurrY))
-        + int2d(Th)(tauK*(1-theta)*fold*SkewSym(v, betaCurrX, betaCurrY))
-        - int2d(Th)(tauK*(1-theta)*L(uold, betaCurrX, betaCurrY, gammaCurr)*SkewSym(v, betaCurrX, betaCurrY))
+        = int2d(Th)(tauK*theta*fCurr*Lss(v, betaCurrX, betaCurrY))
+        + int2d(Th)(tauK*(1-theta)*fold*Lss(v, betaCurrX, betaCurrY))
+        - int2d(Th)(tauK*(1-theta)*L(uold, betaCurrX, betaCurrY, gammaCurr)*Lss(v, betaCurrX, betaCurrY))
+        + int2d(Th)(tauK*uold/dt*Lss(v, betaCurrX, betaCurrY))
         + on(borderLabel, u = gCurr);
 
     // Initialize time dependent "old" variables
